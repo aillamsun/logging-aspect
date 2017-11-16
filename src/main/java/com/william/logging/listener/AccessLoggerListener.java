@@ -4,9 +4,6 @@ import com.william.logging.model.LoggerInfo;
 
 /**
  * 访问日志监听器,实现此接口并注入到spring容器即可获取访问日志信息
- *
- * @author zhouhao
- * @since 3.0
  */
 public interface AccessLoggerListener {
 
