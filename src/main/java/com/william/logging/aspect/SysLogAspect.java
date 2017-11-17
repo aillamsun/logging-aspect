@@ -9,6 +9,7 @@ import com.william.logging.service.UserService;
 import com.william.logging.task.SaveLogTask;
 import com.william.logging.utils.HttpContextUtils;
 import com.william.logging.utils.IPUtils;
+import com.william.logging.utils.WebUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -61,7 +62,8 @@ public class SysLogAspect {
         LoggerInfo log = new LoggerInfo();
         //执行结果状态 默认成功
         log.setExecuteResult(1);
-        log.setResponse("Success");
+        log.setResponse(result);
+        log.setRequestTime(System.currentTimeMillis());
         //保存日志
         saveSysLog(point, log, time);
         return result;
@@ -87,38 +89,20 @@ public class SysLogAspect {
      */
     @AfterThrowing(value = "logPointCut()", throwing = "e")
     public void afterThrowing(JoinPoint joinPoint, Exception e) {
-
-
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
+
         //请求的方法名
-        String className = joinPoint.getTarget().getClass().getName();
-        String methodName = signature.getName();
         SysLog syslog = method.getAnnotation(SysLog.class);
-
         LoggerInfo log = new LoggerInfo();
+        log.setMethod(method);
+        log.setTarget(joinPoint.getTarget().getClass());
         if (syslog != null) {
-            //注解上的功能描述
-            log.setDescribe(syslog.value());
-            //操作类型
-            int type = syslog.type().getValue();
-            log.setType(type);
-            if (1 == type) {
-                log.setAction("登录");
-            } else if (2 == type) {
-                log.setAction("访问");
-//                log.setExecuteResultJson("访问地址:" + className + "." + methodName + "()");
-            } else if (3 == type) {
-                log.setAction("操作");
-            }
-            //操作模块
-            log.setModule(syslog.value());
+            pracessType(log,syslog);
         }
-
         long beginTime = System.currentTimeMillis();
         //执行时长(毫秒)
         long time = System.currentTimeMillis() - beginTime;
-
         //执行结果状态 默认成功
         log.setExecuteResult(-1);
         if (e instanceof Exception) {
@@ -139,28 +123,9 @@ public class SysLogAspect {
         Method method = signature.getMethod();
         log.setMethod(method);
         log.setTarget(joinPoint.getTarget().getClass());
-        //请求的方法名
-        String className = joinPoint.getTarget().getClass().getName();
-        String methodName = signature.getName();
-
-
         SysLog syslog = method.getAnnotation(SysLog.class);
-        if (syslog != null) {
-            //注解上的功能描述
-            log.setDescribe(syslog.value());
-            //操作类型
-            int type = syslog.type().getValue();
-            log.setType(type);
-            if (1 == type) {
-                log.setAction("登录");
-            } else if (2 == type) {
-                log.setAction("访问");
-                log.setDescribe("访问地址:" + className + "." + methodName + "()");
-            } else if (3 == type) {
-                log.setAction("操作");
-            }
-            //操作模块
-            log.setModule(syslog.value());
+        if (syslog != null){
+            pracessType(log,syslog);
         }
         //请求的参数
         Object[] args = joinPoint.getArgs();
@@ -181,8 +146,26 @@ public class SysLogAspect {
         save(log);
     }
 
+    private void pracessType(LoggerInfo log,SysLog syslog){
+        if (syslog != null) {
+            //注解上的功能描述
+            log.setDescribe(syslog.describe());
+            //操作类型
+            int type = syslog.type().getValue();
+            log.setType(type);
+            if (1 == type) {
+                log.setAction("登录");
+            } else if (2 == type) {
+                log.setAction("访问");
+            } else if (3 == type) {
+                log.setAction("操作");
+            }
+            //操作模块
+            log.setModule(syslog.value());
+        }
+    }
+
     private void saveExceptionSysLog(JoinPoint joinPoint, LoggerInfo log, long time, Exception ex) {
-        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         //请求的方法名
         log.setType(4);
         log.setAction("异常");
@@ -217,7 +200,8 @@ public class SysLogAspect {
 //                log.setOperateAccount(user.getUsername());
 //            }
 //        }
-        log.setUrl(request.getRequestURI());
+        log.setHttpHeaders(WebUtil.getHeaders(request));
+        log.setUrl(request.getRequestURI().toString());
         log.setHttpMethod(request.getMethod());
         log.setId(UUID.randomUUID().toString());
         log.setOperUserId("1");

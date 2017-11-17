@@ -25,6 +25,6 @@ public class SwaggerAccessLoggerParser implements AccessLoggerParser {
 //        if (null != operation) {
 //            action = operation.value();
 //        }
-        return new LoggerDefine("", "");
+        return new LoggerDefine("", "",1);
     }
 }

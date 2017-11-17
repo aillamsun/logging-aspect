@@ -2,29 +2,40 @@ package com.william.logging.listener;
 
 
 public class LoggerDefine {
-    private String action;
+    private String module;
 
     private String describe;
 
-    public LoggerDefine(String action, String describe){
-        this.action=action;
+    private Integer type;
+
+    public LoggerDefine(String module, String describe,Integer type){
+        this.module=module;
         this.describe=describe;
+        this.type = type;
     }
 
     public String getDescribe() {
         return describe;
     }
 
-    public void setAction(String action) {
-        this.action = action;
+    public Integer getType() {
+        return type;
     }
 
-    public String getAction() {
-        return action;
+    public void setType(Integer type) {
+        this.type = type;
     }
 
     public void setDescribe(String describe) {
         this.describe = describe;
+    }
+
+    public String getModule() {
+        return module;
+    }
+
+    public void setModule(String module) {
+        this.module = module;
     }
 }
 

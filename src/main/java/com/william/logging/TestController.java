@@ -13,20 +13,20 @@ public class TestController {
 
 
     @RequestMapping(method = RequestMethod.POST)
-    @SysLog(value = "Test Log", describe = "登录", type = SysLogType.LOGIN)
+    @SysLog(value = "测试日志模块", describe = "测试登录", type = SysLogType.LOGIN)
     public String testLogin() {
         return "LOGIN";
     }
 
     @RequestMapping(method = RequestMethod.GET)
-    @SysLog(value = "Test Log", describe = "请求", type = SysLogType.AECCESS)
+    @SysLog(value = "测试日志模块", describe = "测试访问", type = SysLogType.AECCESS)
     public String testAccess() {
         return "AECCESS";
     }
 
 
     @RequestMapping(method = RequestMethod.PUT)
-    @SysLog(value = "Test Log", describe = "操作", type = SysLogType.OPER)
+    @SysLog(value = "测试日志模块", describe = "测试操作", type = SysLogType.OPER)
     public String testOper() {
         return "OPER";
     }

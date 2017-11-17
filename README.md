@@ -61,6 +61,31 @@ public enum SysLogType {
 ## 1 SysLogAspect
 
 ```java
+package com.william.logging.aspect;
+
+import com.alibaba.fastjson.JSON;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.william.logging.annotation.SysLog;
+import com.william.logging.model.LoggerInfo;
+import com.william.logging.service.LogService;
+import com.william.logging.service.UserService;
+import com.william.logging.task.SaveLogTask;
+import com.william.logging.utils.HttpContextUtils;
+import com.william.logging.utils.IPUtils;
+import com.william.logging.utils.WebUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.*;
+import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import javax.servlet.http.HttpServletRequest;
+import java.lang.reflect.Method;
+import java.util.UUID;
+import java.util.concurrent.*;
+
 /**
  * 系统日志，切面处理类
  * <p>
@@ -100,7 +125,8 @@ public class SysLogAspect {
         LoggerInfo log = new LoggerInfo();
         //执行结果状态 默认成功
         log.setExecuteResult(1);
-        log.setResponse("Success");
+        log.setResponse(result);
+        log.setRequestTime(System.currentTimeMillis());
         //保存日志
         saveSysLog(point, log, time);
         return result;
@@ -126,38 +152,20 @@ public class SysLogAspect {
      */
     @AfterThrowing(value = "logPointCut()", throwing = "e")
     public void afterThrowing(JoinPoint joinPoint, Exception e) {
-
-
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
+
         //请求的方法名
-        String className = joinPoint.getTarget().getClass().getName();
-        String methodName = signature.getName();
         SysLog syslog = method.getAnnotation(SysLog.class);
-
         LoggerInfo log = new LoggerInfo();
+        log.setMethod(method);
+        log.setTarget(joinPoint.getTarget().getClass());
         if (syslog != null) {
-            //注解上的功能描述
-            log.setDescribe(syslog.value());
-            //操作类型
-            int type = syslog.type().getValue();
-            log.setType(type);
-            if (1 == type) {
-                log.setAction("登录");
-            } else if (2 == type) {
-                log.setAction("访问");
-//                log.setExecuteResultJson("访问地址:" + className + "." + methodName + "()");
-            } else if (3 == type) {
-                log.setAction("操作");
-            }
-            //操作模块
-            log.setModule(syslog.value());
+            pracessType(log,syslog);
         }
-
         long beginTime = System.currentTimeMillis();
         //执行时长(毫秒)
         long time = System.currentTimeMillis() - beginTime;
-
         //执行结果状态 默认成功
         log.setExecuteResult(-1);
         if (e instanceof Exception) {
@@ -178,28 +186,9 @@ public class SysLogAspect {
         Method method = signature.getMethod();
         log.setMethod(method);
         log.setTarget(joinPoint.getTarget().getClass());
-        //请求的方法名
-        String className = joinPoint.getTarget().getClass().getName();
-        String methodName = signature.getName();
-
-
         SysLog syslog = method.getAnnotation(SysLog.class);
-        if (syslog != null) {
-            //注解上的功能描述
-            log.setDescribe(syslog.value());
-            //操作类型
-            int type = syslog.type().getValue();
-            log.setType(type);
-            if (1 == type) {
-                log.setAction("登录");
-            } else if (2 == type) {
-                log.setAction("访问");
-                log.setDescribe("访问地址:" + className + "." + methodName + "()");
-            } else if (3 == type) {
-                log.setAction("操作");
-            }
-            //操作模块
-            log.setModule(syslog.value());
+        if (syslog != null){
+            pracessType(log,syslog);
         }
         //请求的参数
         Object[] args = joinPoint.getArgs();
@@ -220,8 +209,26 @@ public class SysLogAspect {
         save(log);
     }
 
+    private void pracessType(LoggerInfo log,SysLog syslog){
+        if (syslog != null) {
+            //注解上的功能描述
+            log.setDescribe(syslog.describe());
+            //操作类型
+            int type = syslog.type().getValue();
+            log.setType(type);
+            if (1 == type) {
+                log.setAction("登录");
+            } else if (2 == type) {
+                log.setAction("访问");
+            } else if (3 == type) {
+                log.setAction("操作");
+            }
+            //操作模块
+            log.setModule(syslog.value());
+        }
+    }
+
     private void saveExceptionSysLog(JoinPoint joinPoint, LoggerInfo log, long time, Exception ex) {
-        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         //请求的方法名
         log.setType(4);
         log.setAction("异常");
@@ -256,7 +263,8 @@ public class SysLogAspect {
 //                log.setOperateAccount(user.getUsername());
 //            }
 //        }
-        log.setUrl(request.getRequestURI());
+        log.setHttpHeaders(WebUtil.getHeaders(request));
+        log.setUrl(request.getRequestURI().toString());
         log.setHttpMethod(request.getMethod());
         log.setId(UUID.randomUUID().toString());
         log.setOperUserId("1");
@@ -266,7 +274,6 @@ public class SysLogAspect {
         executor.execute(new SaveLogTask(logService, log));
     }
 }
-
 ```
 
 ## 2 AccessLoggerListener
@@ -321,25 +328,24 @@ public class TestController {
 
 
     @RequestMapping(method = RequestMethod.POST)
-    @SysLog(value = "Test Log", describe = "登录", type = SysLogType.LOGIN)
+    @SysLog(value = "测试日志模块", describe = "测试登录", type = SysLogType.LOGIN)
     public String testLogin() {
         return "LOGIN";
     }
 
     @RequestMapping(method = RequestMethod.GET)
-    @SysLog(value = "Test Log", describe = "请求", type = SysLogType.AECCESS)
+    @SysLog(value = "测试日志模块", describe = "测试访问", type = SysLogType.AECCESS)
     public String testAccess() {
         return "AECCESS";
     }
 
 
     @RequestMapping(method = RequestMethod.PUT)
-    @SysLog(value = "Test Log", describe = "操作", type = SysLogType.OPER)
+    @SysLog(value = "测试日志模块", describe = "测试操作", type = SysLogType.OPER)
     public String testOper() {
         return "OPER";
     }
 }
-
 ```
 
 
@@ -352,12 +358,12 @@ public class TestController {
 > * SysLogAspect 响应
 
 ```json
-SysLogAspect{} {"action":"访问","describe":"访问地址:com.william.logging.TestController.testAccess()","executeResult":1,"httpMethod":"GET","id":"57cccc5c-9e62-4a47-8417-f604c958edb9","method":{"accessible":false,"annotatedExceptionTypes":[],"annotatedParameterTypes":[],"annotatedReceiverType":{"annotations":[],"declaredAnnotations":[],"type":"com.william.logging.TestController"},"annotatedReturnType":{"annotations":[],"declaredAnnotations":[],"type":"java.lang.String"},"annotations":[{},{}],"bridge":false,"declaringClass":"com.william.logging.TestController","default":false,"exceptionTypes":[],"genericExceptionTypes":[],"genericParameterTypes":[],"genericReturnType":"java.lang.String","modifiers":1,"name":"testAccess","parameterAnnotations":[],"parameterCount":0,"parameterTypes":[],"returnType":"java.lang.String","synthetic":false,"typeParameters":[],"varArgs":false},"module":"Test Log","operUserId":"1","operUserName":"admin","requestTime":1510849753705,"response":"Success","responseTime":0,"target":"com.william.logging.TestController","type":2,"url":"/log"}
+SysLogAspect{} {"action":"访问","describe":"测试访问","executeResult":1,"httpHeaders":{"host":"localhost:8080","connection":"keep-alive","cache-control":"max-age=0","user-agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36","upgrade-insecure-requests":"1","accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8","accept-encoding":"gzip, deflate, br","accept-language":"zh-CN,zh;q=0.8,en;q=0.6","cookie":"Idea-92744ae7=c77d525f-75f6-4a90-892f-60b49798f026; olfsk=olfsk49921969428008994; hblid=vKo3049kW1NNZ4bW3m39N0H0RE2aDaCZ; shop_id=2; JSESSIONID=47321175CA9DE3494204BACCA95FAA3A"},"httpMethod":"GET","id":"0ac3d6ed-48c0-426d-9c14-37c14fba4a80","method":{"accessible":false,"annotatedExceptionTypes":[],"annotatedParameterTypes":[],"annotatedReceiverType":{"annotations":[],"declaredAnnotations":[],"type":"com.william.logging.TestController"},"annotatedReturnType":{"annotations":[],"declaredAnnotations":[],"type":"java.lang.String"},"annotations":[{},{}],"bridge":false,"declaringClass":"com.william.logging.TestController","default":false,"exceptionTypes":[],"genericExceptionTypes":[],"genericParameterTypes":[],"genericReturnType":"java.lang.String","modifiers":1,"name":"testAccess","parameterAnnotations":[],"parameterCount":0,"parameterTypes":[],"returnType":"java.lang.String","synthetic":false,"typeParameters":[],"varArgs":false},"module":"测试日志模块","operUserId":"1","operUserName":"admin","requestTime":1510883820012,"response":"AECCESS","responseTime":0,"target":"com.william.logging.TestController","type":2,"url":"/log"}
 ```
 
 > * AccessLoggerListener 响应
 ```json
-AccessLoggerListener{} {"action":"Test Log","describe":"请求","httpHeaders":{"host":"localhost:8080","connection":"keep-alive","cache-control":"max-age=0","user-agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36","upgrade-insecure-requests":"1","accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8","accept-encoding":"gzip, deflate, br","accept-language":"zh-CN,zh;q=0.8,en;q=0.6","cookie":"Idea-92744ae7=c77d525f-75f6-4a90-892f-60b49798f026; olfsk=olfsk49921969428008994; hblid=vKo3049kW1NNZ4bW3m39N0H0RE2aDaCZ; shop_id=2; JSESSIONID=47321175CA9DE3494204BACCA95FAA3A"},"httpMethod":"GET","id":"08679c47-57d1-4420-b210-6e9b02061a83","ip":"127.0.0.1","method":{"accessible":false,"annotatedExceptionTypes":[],"annotatedParameterTypes":[],"annotatedReceiverType":{"annotations":[],"declaredAnnotations":[],"type":"com.william.logging.TestController"},"annotatedReturnType":{"annotations":[],"declaredAnnotations":[],"type":"java.lang.String"},"annotations":[{},{}],"bridge":false,"declaringClass":"com.william.logging.TestController","default":false,"exceptionTypes":[],"genericExceptionTypes":[],"genericParameterTypes":[],"genericReturnType":"java.lang.String","modifiers":1,"name":"testAccess","parameterAnnotations":[],"parameterCount":0,"parameterTypes":[],"returnType":"java.lang.String","synthetic":false,"typeParameters":[],"varArgs":false},"parameters":{},"requestTime":1510849753618,"response":"AECCESS","responseTime":1510849753707,"target":"com.william.logging.TestController","url":"http://localhost:8080/log"}
+AccessLoggerListener{} {"action":"访问","describe":"测试访问","httpHeaders":{"host":"localhost:8080","connection":"keep-alive","cache-control":"max-age=0","user-agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36","upgrade-insecure-requests":"1","accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8","accept-encoding":"gzip, deflate, br","accept-language":"zh-CN,zh;q=0.8,en;q=0.6","cookie":"Idea-92744ae7=c77d525f-75f6-4a90-892f-60b49798f026; olfsk=olfsk49921969428008994; hblid=vKo3049kW1NNZ4bW3m39N0H0RE2aDaCZ; shop_id=2; JSESSIONID=47321175CA9DE3494204BACCA95FAA3A"},"httpMethod":"GET","id":"f21ec585-70f5-4151-91f7-702e44e3ab39","ip":"127.0.0.1","method":{"accessible":false,"annotatedExceptionTypes":[],"annotatedParameterTypes":[],"annotatedReceiverType":{"annotations":[],"declaredAnnotations":[],"type":"com.william.logging.TestController"},"annotatedReturnType":{"annotations":[],"declaredAnnotations":[],"type":"java.lang.String"},"annotations":[{},{}],"bridge":false,"declaringClass":"com.william.logging.TestController","default":false,"exceptionTypes":[],"genericExceptionTypes":[],"genericParameterTypes":[],"genericReturnType":"java.lang.String","modifiers":1,"name":"testAccess","parameterAnnotations":[],"parameterCount":0,"parameterTypes":[],"returnType":"java.lang.String","synthetic":false,"typeParameters":[],"varArgs":false},"module":"测试日志模块","parameters":{},"requestTime":1510883820005,"response":"AECCESS","responseTime":1510883820012,"target":"com.william.logging.TestController","type":2,"url":"http://localhost:8080/log"}
 ```
 
 

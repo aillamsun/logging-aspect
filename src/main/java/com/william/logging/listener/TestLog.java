@@ -1,6 +1,8 @@
 package com.william.logging.listener;
 
 import com.alibaba.fastjson.JSON;
+import com.william.logging.annotation.SysLog;
+import com.william.logging.enums.SysLogType;
 import com.william.logging.model.LoggerInfo;
 import org.springframework.stereotype.Component;
 /**

@@ -2,6 +2,7 @@ package com.william.logging.listener.aop;
 
 import com.william.logging.annotation.SysLog;
 import com.william.logging.context.MethodInterceptorHolder;
+import com.william.logging.enums.SysLogType;
 import com.william.logging.listener.AccessLoggerListener;
 import com.william.logging.listener.LoggerDefine;
 import com.william.logging.model.LoggerInfo;
@@ -50,6 +51,8 @@ public class AopAccessLoggerSupport extends StaticMethodMatcherPointcutAdvisor {
                 info.setResponse(response);
                 info.setResponseTime(System.currentTimeMillis());
             } catch (Throwable e) {
+                info.setType(SysLogType.EXCEPTION.getValue());
+                info.setAction("异常");
                 info.setException(e);
                 throw e;
             } finally {
@@ -74,8 +77,17 @@ public class AopAccessLoggerSupport extends StaticMethodMatcherPointcutAdvisor {
                 .orElse(null);
 
         if (define != null) {
-            info.setAction(define.getAction());
+            info.setModule(define.getModule());
             info.setDescribe(define.getDescribe());
+            Integer type = define.getType();
+            info.setType(type);
+            if (type == SysLogType.AECCESS.getValue()){
+                info.setAction("访问");
+            }else if(type == SysLogType.LOGIN.getValue()){
+                info.setAction("登录");
+            }else if(type == SysLogType.OPER.getValue()){
+                info.setAction("操作");
+            }
         }
         info.setParameters(holder.getArgs());
         info.setTarget(holder.getTarget().getClass());

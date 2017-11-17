@@ -3,6 +3,7 @@ package com.william.logging.listener.aop;
 
 import com.william.logging.annotation.SysLog;
 import com.william.logging.context.MethodInterceptorHolder;
+import com.william.logging.enums.SysLogType;
 import com.william.logging.listener.LoggerDefine;
 import org.springframework.core.annotation.AnnotationUtils;
 
@@ -35,6 +36,11 @@ public class DefaultAccessLoggerParser implements AccessLoggerParser {
                 .flatMap(Stream::of)
                 .reduce((c, s) -> c.concat("\n").concat(s))
                 .orElse("");
-        return new LoggerDefine(action,describe);
+        Integer type = SysLogType.AECCESS.getValue();
+        if (null != methodAnn){
+            type = methodAnn.type().getValue();
+        }
+
+        return new LoggerDefine(action, describe, type);
     }
 }
